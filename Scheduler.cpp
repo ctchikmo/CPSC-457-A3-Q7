@@ -2,6 +2,9 @@
 #include <fstream>
 #include <stdlib.h>
 #include <string>
+#include <queue>
+#include <algorithm>
+#include <cmath>
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // Structures, Variables and Prototypes
@@ -9,20 +12,76 @@
 
 typedef struct Process
 {
-	int id;
+	std::string str_id;
 	int arrival;
 	int burst;
 
 	Process(int id, int arrival, int burst) :
-		id(id),
+		str_id("P"),
 		arrival(arrival),
 		burst(burst)
-	{}
+	{
+		int i = 0;
+		int power10;
+		int value;
+
+		// Getting the max power10
+		do
+		{
+			i++;
+			power10 = std::pow(10, i);
+			value = id % power10;
+
+		} while (value != id);
+		i--;
+		power10 = std::pow(10, i);
+
+		while (i != -1)
+		{
+			value = id / power10;
+			id -= power10 * value;
+
+			char c = '0' + value;
+			str_id.push_back(c);
+
+			i--;
+			power10 = std::pow(10, i);
+		} 
+	}
+
+	bool operator<(Process const &rhs) { return burst < rhs.burst; }
+
 } Process;
+
+typedef struct IsInt
+{
+	bool isInt = true;
+	int value = 0;
+
+	IsInt(std::string& check)
+	{
+		if (check.empty())
+			isInt = false;
+
+		for (int i = check.length() - 1; i >= 0; i--)
+		{
+			char valueI = check.at(i);
+			if (valueI < '0' || valueI > '9')
+			{
+				isInt = false;
+				return;
+			}
+
+			value += std::pow(10, check.length() - i - 1) * (valueI - '0');
+		}
+	}
+
+} IsInt;
 
 std::ifstream ifs_config;
 bool RR = false;
 int quantum = 0;
+std::deque<Process*> deque_ready; // We need to use a double sided queue so that std::sort is able to sort it. 
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // General Functions
@@ -47,7 +106,6 @@ void setup(int argc, char ** argv)
 
 	// Get the sheduler type and check for the appropriate 3rd command. 
 	std::string type(argv[2]);
-	char quantum_num;
 	if (type.compare("RR") == 0 || type.compare("rr") == 0)
 	{
 		if (argc != 4)
@@ -56,14 +114,15 @@ void setup(int argc, char ** argv)
 			exit(-1);
 		}
 
-		quantum_num = argv[3][0] - '0';
-		if (quantum_num < 0 || quantum_num > 9) // Therefore the original input was not an integer
+		std::string temp(argv[3]);
+		IsInt IsInt_input_quantum(temp);
+		if (!IsInt_input_quantum.isInt) 
 		{
 			std::cout << "Error, please enter an integer value for the quantum" << std::endl;
 			exit(-1);
 		}
 
-		quantum = quantum_num;
+		quantum = IsInt_input_quantum.value;
 		RR = true;
 	}
 	else if (type.compare("SJF") == 0 || type.compare("sjf") == 0)
@@ -84,4 +143,43 @@ void setup(int argc, char ** argv)
 int main(int argc, char ** argv)
 {
 	setup(argc, argv);
+
+	std::string line;
+	int id = 0;
+	while (ifs_config.good() && std::getline(ifs_config, line))
+	{
+		std::string arrival;
+		std::string burst;
+
+		int i = 0;
+		for (; line.at(i) != ' '; i++)
+			arrival.push_back(line.at(i));
+		i++;
+
+		IsInt ii_arrival(arrival);
+		if (!ii_arrival.isInt)
+		{
+			std::cout << "Error, a value in the input file is not an integer: " << arrival << std::endl;
+			exit(-1);
+		}
+
+		for (; i < line.size() && line.at(i) != '\r'; i++)
+			burst.push_back(line.at(i));
+
+		IsInt ii_burst(burst);
+		if (!ii_burst.isInt)
+		{
+			std::cout << "Error, a value in the input file is not an integer: " << burst << std::endl;
+			exit(-1);
+		}
+
+		deque_ready.push_front(new Process(id, ii_arrival.value, ii_burst.value));
+		id++;
+	}
+		
+
+	// Note that RR is preemptive FCFS, so the queue is already in the proper order for that. We must sort for SJF though:
+	// Sorting to ascending order via the structs less than operator, which is defined around burst time. 
+	if (!RR)
+		std::sort(deque_ready.begin(), deque_ready.end());
 }
